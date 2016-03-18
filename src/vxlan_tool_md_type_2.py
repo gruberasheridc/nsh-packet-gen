@@ -5,6 +5,12 @@
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License v1.0 which accompanies this distribution,
 # and is available at http://www.eclipse.org/legal/epl-v10.html
+from _ast import Str
+import argparse
+from ctypes import Structure, c_ubyte, c_ushort, c_uint, c_char_p
+import socket, sys
+from struct import *
+
 
 __author__ = "Yi Yang, Reinaldo Penno"
 __copyright__ = "Copyright(c) 2015, Intel, Inc. and Cisco Systems, Inc."
@@ -12,18 +18,20 @@ __version__ = "0.2"
 __email__ = "yi.y.yang@intel.com, rapenno@gmail.com"
 __status__ = "beta"
 
-import socket, sys
-import argparse
-from struct import *
-from ctypes import Structure, c_ubyte, c_ushort, c_uint
 
 NSH_TYPE1_LEN = 0x6
 NSH_MD_TYPE1 = 0x1
+NSH_MD_TYPE2 = 0x2
 NSH_VERSION1 = int('00', 2)
 NSH_NEXT_PROTO_IPV4 = int('00000001', 2)
 NSH_NEXT_PROTO_OAM = int('00000100', 2)
 NSH_NEXT_PROTO_ETH = int('00000011', 2)
 NSH_FLAG_ZERO = int('00000000', 2)
+
+NSH_SERVICE_PATH_HEADER_LEN = 0x1
+NSH_BASE_HEADER_LEN = 0x1
+NSH_VAR_LEN_CTX_BASE_HEADR_LEN = 0x1
+NSH_VAR_MD_LEN = 0x1;
 
 IP_HEADER_LEN = 5
 IPV4_HEADER_LEN_BYTES = 20
@@ -133,8 +141,7 @@ class CONTEXTHEADER(Structure):
                 ('network_shared', c_uint),
                 ('service_platform', c_uint),
                 ('service_shared', c_uint)]
-
-    header_size = 16
+    
 
     def __init__(self, network_platform=0x00, network_shared=0x00, service_platform=0x00, service_shared=0x00, *args,
                  **kwargs):
@@ -143,6 +150,8 @@ class CONTEXTHEADER(Structure):
         self.network_shared = network_shared
         self.service_platform = service_platform
         self.service_shared = service_shared
+        
+    header_size = 16
 
     def build(self):
         return pack('!I I I I',
@@ -150,6 +159,34 @@ class CONTEXTHEADER(Structure):
                     self.network_shared,
                     self.service_platform,
                     self.service_shared)
+
+
+class VARLENGTHMDHEADER(Structure):
+    """
+    Represent an NSH Optional Variable Length Context Headers
+    """
+    _fields_ = [('tlv_class', c_char_p),
+                ('tlv_type', c_char_p),
+                ('flags', c_ushort, 3),
+                ('length', c_ushort, 5),
+                ('var_md', c_char_p)]
+    
+    header_size = 8
+
+    def __init__(self, tlv_class="dpi.service.result".encode('utf-8'), tlv_type="MatchReport".encode('utf-8'),flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, var_md="".encode('utf-8'), *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.tlv_class = tlv_class
+        self.tlv_type = tlv_type
+        self.flags = flags
+        self.length = length
+        self.var_md = var_md;
+
+    def build(self):
+        return pack('s s B s',
+                    self.tlv_class,
+                    self.tlv_type,
+                    (self.flags << 5) + self.length,
+                    self.var_md)
 
 class IP4HEADER(Structure):
     _fields_ = [
@@ -538,6 +575,7 @@ def main():
         myvxlanheader = VXLAN()
         mynshbaseheader = BASEHEADER()
         mynshcontextheader = CONTEXTHEADER()
+        mynshvarlengthmdheader = VARLENGTHMDHEADER()
 
         """ Set Ethernet header """
         dstmacaddr = args.outer_destination_mac.split(":")
@@ -567,8 +605,8 @@ def main():
 
         """ Set NSH base header """
         mynshbaseheader.flags = NSH_FLAG_ZERO
-        mynshbaseheader.length = NSH_TYPE1_LEN
-        mynshbaseheader.md_type = NSH_MD_TYPE1
+        mynshbaseheader.length = NSH_BASE_HEADER_LEN + NSH_SERVICE_PATH_HEADER_LEN + NSH_VAR_LEN_CTX_BASE_HEADR_LEN + NSH_VAR_MD_LEN
+        mynshbaseheader.md_type = NSH_MD_TYPE2
         mynshbaseheader.next_protocol = NSH_NEXT_PROTO_ETH
         mynshbaseheader.service_path = 23
         mynshbaseheader.service_index = 45
@@ -578,12 +616,15 @@ def main():
         mynshcontextheader.network_shared = 0x1234
         mynshcontextheader.service_platform = 0x12345678
         mynshcontextheader.service_shared = 0x87654321
+        
+        """ Set NSH variable length metadata context header """
+        mynshvarlengthmdheader.var_md = "abadabada".encode('utf-8')
 
         innerippack = build_udp_packet(args.inner_source_ip, args.inner_destination_ip, args.inner_source_udp_port, args.inner_destination_udp_port, "Hellow, World!!!".encode('utf-8'), False)
         if (args.type == "vxlan_gpe_nsh"):
-            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshcontextheader.build() + myethheader.build() + innerippack, False)
+            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshcontextheader.build() + mynshvarlengthmdheader.build() + myethheader.build() + innerippack, False)
         elif (args.type == "eth_nsh"):
-            outerippack = mynshbaseheader.build() + mynshcontextheader.build() + myethheader.build() + innerippack
+            outerippack = mynshbaseheader.build() + mynshcontextheader.build() + myethheader.build() + mynshvarlengthmdheader.build() + innerippack
             myethheader.ethertype0 = 0x89
             myethheader.ethertype1 = 0x4f
 
