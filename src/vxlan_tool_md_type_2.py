@@ -182,7 +182,7 @@ class VARLENGTHMDHEADER(Structure):
         self.var_md = var_md;
 
     def build(self):
-        return pack('H B B s',
+        return pack('!H B B s',
                     self.tlv_class,
                     self.tlv_type,
                     (self.flags << 5) + self.length,
