@@ -7,7 +7,7 @@
 # and is available at http://www.eclipse.org/legal/epl-v10.html
 from _ast import Str
 import argparse
-from ctypes import Structure, c_ubyte, c_ushort, c_uint, c_char_p
+from ctypes import Structure, c_ubyte, c_ushort, c_uint, c_char_p, c_byte
 import socket, sys
 from struct import *
 
@@ -165,15 +165,15 @@ class VARLENGTHMDHEADER(Structure):
     """
     Represent an NSH Optional Variable Length Context Headers
     """
-    _fields_ = [('tlv_class', c_char_p),
-                ('tlv_type', c_char_p),
+    _fields_ = [('tlv_class', c_uint, 16),
+                ('tlv_type', c_byte),
                 ('flags', c_ushort, 3),
                 ('length', c_ushort, 5),
                 ('var_md', c_char_p)]
     
     header_size = 8
 
-    def __init__(self, tlv_class="dpi.service.result".encode('utf-8'), tlv_type="MatchReport".encode('utf-8'),flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, var_md="".encode('utf-8'), *args, **kwargs):
+    def __init__(self, tlv_class=3, tlv_type=1,flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, var_md="".encode('utf-8'), *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.tlv_class = tlv_class
         self.tlv_type = tlv_type
@@ -182,7 +182,7 @@ class VARLENGTHMDHEADER(Structure):
         self.var_md = var_md;
 
     def build(self):
-        return pack('s s B s',
+        return pack('H B B s',
                     self.tlv_class,
                     self.tlv_type,
                     (self.flags << 5) + self.length,
@@ -574,7 +574,7 @@ def main():
         myudpheader = UDPHEADER()
         myvxlanheader = VXLAN()
         mynshbaseheader = BASEHEADER()
-        mynshcontextheader = CONTEXTHEADER()
+        """mynshcontextheader = CONTEXTHEADER()"""
         mynshvarlengthmdheader = VARLENGTHMDHEADER()
 
         """ Set Ethernet header """
@@ -611,20 +611,20 @@ def main():
         mynshbaseheader.service_path = 23
         mynshbaseheader.service_index = 45
 
-        """ Set NSH context header """
+        """ Set NSH context header
         mynshcontextheader.network_platform = int_from_bytes(socket.inet_aton(args.outer_destination_ip))
         mynshcontextheader.network_shared = 0x1234
         mynshcontextheader.service_platform = 0x12345678
-        mynshcontextheader.service_shared = 0x87654321
+        mynshcontextheader.service_shared = 0x87654321"""
         
         """ Set NSH variable length metadata context header """
         mynshvarlengthmdheader.var_md = "abadabada".encode('utf-8')
 
         innerippack = build_udp_packet(args.inner_source_ip, args.inner_destination_ip, args.inner_source_udp_port, args.inner_destination_udp_port, "Hellow, World!!!".encode('utf-8'), False)
         if (args.type == "vxlan_gpe_nsh"):
-            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshcontextheader.build() + mynshvarlengthmdheader.build() + myethheader.build() + innerippack, False)
+            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshvarlengthmdheader.build() + myethheader.build() + innerippack, False)
         elif (args.type == "eth_nsh"):
-            outerippack = mynshbaseheader.build() + mynshcontextheader.build() + myethheader.build() + mynshvarlengthmdheader.build() + innerippack
+            outerippack = mynshbaseheader.build() + mynshvarlengthmdheader.build() + myethheader.build() + mynshvarlengthmdheader.build() + innerippack
             myethheader.ethertype0 = 0x89
             myethheader.ethertype1 = 0x4f
 
@@ -637,7 +637,7 @@ def main():
         if (args.type == "eth_nsh"):
             offset = eth_length
             decode_nsh_baseheader(ethpkt, offset, mynshbaseheader)
-            decode_nsh_contextheader(ethpkt, offset + nshbase_length, mynshcontextheader)
+            """decode_nsh_contextheader(ethpkt, offset + nshbase_length, mynshcontextheader)"""
         elif (args.type == "vxlan_gpe_nsh"):
             """ Decode IP header """
             decode_ip(ethpkt, myipheader)
@@ -647,7 +647,7 @@ def main():
 
             offset = eth_length + ip_length + udp_length + vxlan_length
             decode_nsh_baseheader(ethpkt, offset, mynshbaseheader)
-            decode_nsh_contextheader(ethpkt, offset + nshbase_length, mynshcontextheader)
+            """decode_nsh_contextheader(ethpkt, offset + nshbase_length, mynshcontextheader)"""
         pktnum = 0
         while (args.number > 0):
             """ Send it and make sure all the data is sent out """
@@ -682,7 +682,7 @@ def main():
 
             """ Print NSH context header """
             if (do_print):
-                print_nsh_contextheader(mynshcontextheader)
+                """print_nsh_contextheader(mynshcontextheader)"""
 
             args.number -= 1
         sys.exit(0)
