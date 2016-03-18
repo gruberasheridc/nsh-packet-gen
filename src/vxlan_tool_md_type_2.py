@@ -173,7 +173,7 @@ class VARLENGTHMDHEADER(Structure):
     
     header_size = 8
 
-    def __init__(self, tlv_class=3, tlv_type=1,flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, var_md="".encode('utf-8'), *args, **kwargs):
+    def __init__(self, tlv_class=3, tlv_type=1,flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, var_md="".encode(), *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.tlv_class = tlv_class
         self.tlv_type = tlv_type
@@ -602,6 +602,11 @@ def main():
         myvxlanheader.next_protocol = 0x04
         myvxlanheader.vni = 0x1234
         myvxlanheader.reserved2 = 0
+        
+        """ Set NSH variable length metadata context header """
+        mynshvarlengthmdheader.var_md = "abadabadabadabadabadabadabadabad".encode('utf-8')
+        mynshvarlengthmdheader.length = len(mynshvarlengthmdheader.var_md) / 4 # Need to write the length in 4-byte words
+        NSH_VAR_MD_LEN = mynshvarlengthmdheader.length
 
         """ Set NSH base header """
         mynshbaseheader.flags = NSH_FLAG_ZERO
@@ -616,9 +621,6 @@ def main():
         mynshcontextheader.network_shared = 0x1234
         mynshcontextheader.service_platform = 0x12345678
         mynshcontextheader.service_shared = 0x87654321"""
-        
-        """ Set NSH variable length metadata context header """
-        mynshvarlengthmdheader.var_md = "abadabada".encode('utf-8')
 
         innerippack = build_udp_packet(args.inner_source_ip, args.inner_destination_ip, args.inner_source_udp_port, args.inner_destination_udp_port, "Hellow, World!!!".encode('utf-8'), False)
         if (args.type == "vxlan_gpe_nsh"):
