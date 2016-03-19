@@ -168,25 +168,22 @@ class VARLENGTHMDHEADER(Structure):
     _fields_ = [('tlv_class', c_uint, 16),
                 ('tlv_type', c_byte),
                 ('flags', c_ushort, 3),
-                ('length', c_ushort, 5),
-                ('var_md', c_char_p)]
+                ('length', c_ushort, 5)]
     
     header_size = 8
 
-    def __init__(self, tlv_class=3, tlv_type=1,flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, var_md="".encode(), *args, **kwargs):
+    def __init__(self, tlv_class=3, tlv_type=1,flags=NSH_FLAG_ZERO, length=NSH_VAR_MD_LEN, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
         self.tlv_class = tlv_class
         self.tlv_type = tlv_type
         self.flags = flags
-        self.length = length
-        self.var_md = var_md;
+        self.length = length;
 
     def build(self):
-        return pack('!H B B s',
+        return pack('!H B B',
                     self.tlv_class,
                     self.tlv_type,
-                    (self.flags << 5) + self.length,
-                    self.var_md)
+                    (self.flags << 5) + self.length)
 
 class IP4HEADER(Structure):
     _fields_ = [
@@ -446,6 +443,9 @@ def build_udp_packet(src_ip, dest_ip, src_port, dest_port, data, swap_ip):
 
     return udp_packet
 
+def roundup(x):
+    return x if x % 4 == 0 else x + 4 - x % 4
+
 def getmac(interface):
   try:
     mac = open('/sys/class/net/'+interface+'/address').readline()
@@ -604,8 +604,11 @@ def main():
         myvxlanheader.reserved2 = 0
         
         """ Set NSH variable length metadata context header """
-        mynshvarlengthmdheader.var_md = "abadabadabadabadabadabadabadabad".encode('utf-8')
-        mynshvarlengthmdheader.length = len(mynshvarlengthmdheader.var_md) / 4 # Need to write the length in 4-byte words
+        var_metadata = "abadabadabadabadabadabadabadabad"
+        var_md_len = roundup(len(var_metadata)) # Make sure var_len is 4 byte words
+        var_metadata_pad = var_metadata.ljust(var_md_len, '\0')
+        variable_metadata = var_metadata_pad.encode('utf-8')
+        mynshvarlengthmdheader.length = var_md_len / 4 # Need to write the length in 4-byte words
         NSH_VAR_MD_LEN = mynshvarlengthmdheader.length
 
         """ Set NSH base header """
@@ -624,9 +627,9 @@ def main():
 
         innerippack = build_udp_packet(args.inner_source_ip, args.inner_destination_ip, args.inner_source_udp_port, args.inner_destination_udp_port, "Hellow, World!!!".encode('utf-8'), False)
         if (args.type == "vxlan_gpe_nsh"):
-            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshvarlengthmdheader.build() + myethheader.build() + innerippack, False)
+            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshvarlengthmdheader.build() + variable_metadata + myethheader.build() + innerippack, False)
         elif (args.type == "eth_nsh"):
-            outerippack = mynshbaseheader.build() + mynshvarlengthmdheader.build() + myethheader.build() + mynshvarlengthmdheader.build() + innerippack
+            outerippack = mynshbaseheader.build() + mynshvarlengthmdheader.build() + variable_metadata + myethheader.build() + mynshvarlengthmdheader.build() + variable_metadata + innerippack
             myethheader.ethertype0 = 0x89
             myethheader.ethertype1 = 0x4f
 
