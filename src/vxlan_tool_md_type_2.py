@@ -184,6 +184,49 @@ class VARLENGTHMDHEADER(Structure):
                     self.tlv_class,
                     self.tlv_type,
                     (self.flags << 5) + self.length)
+        
+class MATCHREPORT(Structure):
+    """
+    Represents a DPI service MatchReport
+    """
+    
+    _fields_ = [
+        ('rid', c_ushort),
+        ('is_range', c_ubyte),
+        ('position', c_ushort)]
+
+    size = 3
+    
+    def __init__(self, rid, is_range, position, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.rid = rid
+        self.is_range = is_range
+        self.position = position;
+
+    def build(self):
+        return pack('!H B H', self.rid, self.is_range, self.position)
+    
+class MATCHREPORTRANGE(Structure):
+    """
+    Represents a DPI service MatchReportRange
+    """
+    _fields_ = [
+        ('rid', c_ushort),
+        ('is_range', c_ubyte),
+        ('position', c_ushort),
+        ('length', c_ushort)]
+
+    size = 4
+    
+    def __init__(self, rid, is_range, position, length, *args, **kwargs):
+        super(self.__class__, self).__init__(*args, **kwargs)
+        self.rid = rid
+        self.is_range = is_range
+        self.position = position;
+        self.length = length;
+
+    def build(self):
+        return pack('!H B H H', self.rid, self.is_range, self.position, self.length)
 
 class IP4HEADER(Structure):
     _fields_ = [
@@ -604,10 +647,12 @@ def main():
         myvxlanheader.reserved2 = 0
         
         """ Set NSH variable length metadata context header """
-        var_metadata = "abadabadabadabadabadabadabadabad"
+        matchreport = MATCHREPORT(1, int('00000000', 2), 2)
+        matchreportrange = MATCHREPORTRANGE(3, int('00000001', 2), 15, 3)
+        var_metadata = matchreport.build() + matchreportrange.build()
         var_md_len = roundup(len(var_metadata)) # Make sure var_len is 4 byte words
         var_metadata_pad = var_metadata.ljust(var_md_len, '\0')
-        variable_metadata = var_metadata_pad.encode('utf-8')
+        variable_metadata = var_metadata_pad#.encode('utf-8')
         mynshvarlengthmdheader.length = var_md_len / 4 # Need to write the length in 4-byte words
         NSH_VAR_MD_LEN = mynshvarlengthmdheader.length
 
