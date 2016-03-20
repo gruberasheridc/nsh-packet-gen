@@ -195,7 +195,7 @@ class MATCHREPORT(Structure):
         ('is_range', c_ubyte),
         ('position', c_ushort)]
 
-    size = 3
+    size = 5
     
     def __init__(self, rid, is_range, position, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
@@ -216,7 +216,7 @@ class MATCHREPORTRANGE(Structure):
         ('position', c_ushort),
         ('length', c_ushort)]
 
-    size = 4
+    size = 7
     
     def __init__(self, rid, is_range, position, length, *args, **kwargs):
         super(self.__class__, self).__init__(*args, **kwargs)
@@ -647,9 +647,10 @@ def main():
         myvxlanheader.reserved2 = 0
         
         """ Set NSH variable length metadata context header """
-        matchreport = MATCHREPORT(1, int('00000000', 2), 2)
+        matchreport1 = MATCHREPORT(1, int('00000000', 2), 2)
+        matchreport2 = MATCHREPORT(2, int('00000000', 2), 5)
         matchreportrange = MATCHREPORTRANGE(3, int('00000001', 2), 15, 3)
-        var_metadata = matchreport.build() + matchreportrange.build()
+        var_metadata = matchreport1.build() + matchreportrange.build() + matchreport2.build()
         var_md_len = roundup(len(var_metadata)) # Make sure var_len is 4 byte words
         var_metadata_pad = var_metadata.ljust(var_md_len, '\0')
         variable_metadata = var_metadata_pad#.encode('utf-8')
