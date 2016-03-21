@@ -661,7 +661,7 @@ def main():
         mynshbaseheader.flags = NSH_FLAG_ZERO
         mynshbaseheader.length = NSH_BASE_HEADER_LEN + NSH_SERVICE_PATH_HEADER_LEN + NSH_VAR_LEN_CTX_BASE_HEADR_LEN + NSH_VAR_MD_LEN
         mynshbaseheader.md_type = NSH_MD_TYPE2
-        mynshbaseheader.next_protocol = NSH_NEXT_PROTO_ETH
+        mynshbaseheader.next_protocol = NSH_NEXT_PROTO_IPV4
         mynshbaseheader.service_path = 23
         mynshbaseheader.service_index = 45
 
@@ -673,7 +673,7 @@ def main():
 
         innerippack = build_udp_packet(args.inner_source_ip, args.inner_destination_ip, args.inner_source_udp_port, args.inner_destination_udp_port, "Hellow, World!!!".encode('utf-8'), False)
         if (args.type == "vxlan_gpe_nsh"):
-            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshvarlengthmdheader.build() + variable_metadata + myethheader.build() + innerippack, False)
+            outerippack = build_udp_packet(args.outer_source_ip, args.outer_destination_ip, args.outer_source_udp_port, 4790, myvxlanheader.build() + mynshbaseheader.build() + mynshvarlengthmdheader.build() + variable_metadata + innerippack, False)
         elif (args.type == "eth_nsh"):
             outerippack = mynshbaseheader.build() + mynshvarlengthmdheader.build() + variable_metadata + myethheader.build() + mynshvarlengthmdheader.build() + variable_metadata + innerippack
             myethheader.ethertype0 = 0x89
